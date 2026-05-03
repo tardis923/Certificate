@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>考试奖状打印工具</title>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #eef2f5;
+            font-family: 'SimSun', '宋体', 'Times New Roman', serif;
+            padding: 12px;
+        }
+        .master-layout {
+            display: flex;
+            gap: 16px;
+            max-width: 1800px;
+            margin: 0 auto;
+            align-items: flex-start;
+            flex-wrap: wrap;
+        }
+        .config-panel {
+            width: 300px;
+            flex-shrink: 0;
+            background: white;
+            border-radius: 24px;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.08);
+            padding: 16px 14px;
+            overflow-y: auto;
+            max-height: 92vh;
+            position: sticky;
+            top: 12px;
+        }
+        .preview-panel {
+            flex: 1;
+            min-width: 0;
+            background: #d9d9d9;
+            border-radius: 20px;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            overflow-x: auto;
+        }
+        .config-panel h3 { font-size: 1rem; margin-bottom: 12px; border-left: 4px solid #f4b942; padding-left: 10px; }
+        .global-fields { background: #fef9e6; padding: 12px; border-radius: 20px; margin-bottom: 20px; }
+        .field-badge { background: #feeed6; border-radius: 30px; padding: 4px 10px; font-size: 0.7rem; font-weight: bold; display: inline-block; margin-bottom: 10px; }
+        .row-2col { display: flex; gap: 12px; margin-bottom: 8px; }
+        .row-2col > div { flex: 1; }
+        .global-fields label { display: block; font-weight: 600; font-size: 0.7rem; margin: 6px 0 2px 0; color: #2c3e4e; }
+        .global-fields input { width: 100%; padding: 6px 8px; border-radius: 16px; border: 1px solid #cbd5e1; font-size: 0.75rem; font-family: 'SimSun', '宋体', monospace; }
+        .btn-icon { background: #f4b942; border: none; padding: 6px 12px; border-radius: 30px; cursor: pointer; font-size: 0.7rem; font-weight: bold; width: 100%; margin-top: 12px; }
+        .btn-icon:hover { background: #e2a829; }
+        .data-panel { background: white; border-radius: 24px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); padding: 16px; margin-top: 0; }
+        .toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; align-items: center; }
+        .btn { background: white; border: 1px solid #cbd5e1; padding: 5px 12px; border-radius: 30px; font-weight: 500; cursor: pointer; font-size: 0.75rem; font-family: 'SimSun', '宋体', sans-serif; }
+        .btn-primary { background: #205072; color: white; border: none; }
+        .btn-warning { background: #f39c12; color: white; border: none; }
+        .data-table { width: 100%; border-collapse: collapse; font-size: 0.7rem; table-layout: fixed; }
+        .data-table th, .data-table td { border-bottom: 1px solid #e2e8f0; padding: 6px 3px; text-align: center; word-break: break-word; }
+        .data-table th:first-child, .data-table td:first-child { width: 28%; }
+        .data-table th:nth-child(2), .data-table td:nth-child(2) { width: 28%; }
+        .data-table th:nth-child(3), .data-table td:nth-child(3) { width: 28%; }
+        .data-table th:last-child, .data-table td:last-child { width: 16%; }
+        .data-table input { width: 100%; padding: 4px 3px; border-radius: 14px; border: 1px solid #e2e8f0; text-align: center; font-size: 0.68rem; font-family: 'SimSun', '宋体', sans-serif; }
+        .delete-row { background: none; border: none; color: #c0392b; cursor: pointer; font-size: 0.9rem; }
+        .preview-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; width: 100%; font-size: 0.85rem; background: #f8fafc; padding: 8px 16px; border-radius: 40px; }
+        .cert-scroll { max-height: 82vh; overflow-y: auto; display: flex; flex-direction: column; gap: 28px; align-items: center; width: 100%; padding: 8px; }
+        .cert-canvas-card { position: relative; width: 277mm; min-width: 277mm; background-color: #fef7e0; background-size: cover; background-position: center; background-repeat: no-repeat; border-radius: 6px; box-shadow: 0 15px 30px rgba(0,0,0,0.2); aspect-ratio: 297 / 210; }
+        .cert-text-layer { position: relative; width: 100%; height: 100%; }
+        .draggable-item { position: absolute; cursor: grab; user-select: none; font-family: 'SimSun', '宋体', 'Times New Roman', serif; transform: translate(-50%, -50%); }
+        .draggable-item:active { cursor: grabbing; }
+        .greeting-text { white-space: nowrap; }
+        .signature-wrapper { position: absolute; transform: translate(-50%, -50%); text-align: center; cursor: grab; }
+        .resize-handle { position: absolute; width: 14px; height: 14px; background: #3b82f6; border: 2px solid white; border-radius: 50%; bottom: -8px; right: -12px; cursor: nw-resize; box-shadow: 0 1px 4px rgba(0,0,0,0.3); z-index: 100; }
+        .resize-handle:hover { transform: scale(1.15); background: #2563eb; }
+        .note-text { font-size: 10px; color: #d97706; background: #fffbeb; padding: 6px; border-radius: 16px; text-align: center; margin-bottom: 12px; }
+        .variable-hint { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+        .variable-hint span { background: #e9ecef; padding: 2px 10px; border-radius: 30px; cursor: pointer; font-size: 10px; font-family: monospace; }
+        .indent-hint { font-size: 9px; color: #2c7a4d; background: #e6f7e6; padding: 4px 8px; border-radius: 16px; margin-top: 8px; text-align: center; font-weight: bold; }
+        .size-hint { font-size: 11px; color: #2c3e4e; margin-top: 14px; text-align: center; background: #e2e8f0; padding: 6px 14px; border-radius: 30px; width: 100%; }
+        textarea { width: 100%; padding: 8px; border-radius: 20px; border: 1px solid #cbd5e1; font-size: 0.75rem; font-family: monospace; resize: vertical; }
+        .upload-bg { padding: 8px; font-size: 12px; border: 1px dashed #aaa; border-radius: 30px; text-align: center; cursor: pointer; background: #f9f9fb; margin-bottom: 6px; }
+        @media (max-width: 1000px) { .master-layout { flex-direction: column; } .config-panel { width: 100%; position: relative; top: 0; } .preview-panel { width: 100%; } .cert-canvas-card { width: 100%; min-width: auto; } }
+    </style>
+</head>
+<body>
+
+<div class="master-layout">
+    <div class="config-panel">
+        <h3>📄 奖状核心设置</h3>
+        <div class="note-text">✨ 拖拽文字移动 | 拖拽<span style="color:#3b82f6;font-weight:bold;">蓝色圆点</span>缩放字体<br>✅ 每个段落首行缩进2字符 | 应用全局按钮已修复</div>
+        
+        <div class="global-fields">
+            <div class="field-badge">📌 全局统一信息</div>
+            <div class="row-2col">
+                <div><label>学年</label><input type="text" id="globalYear" value="2025-2026学年"></div>
+                <div><label>学期</label><input type="text" id="globalSemester" value="第一学期"></div>
+            </div>
+            <div class="row-2col">
+                <div><label>考试类型</label><input type="text" id="globalExam" value="期中考试"></div>
+                <div><label>落款单位</label><input type="text" id="globalSignatory" value="XX班"></div>
+            </div>
+            <label>落款日期</label>
+            <input type="text" id="globalDate" value="2026年1月">
+            <button class="btn-icon" id="applyGlobalBtn">✅ 应用全局 & 刷新</button>
+        </div>
+
+        <div style="margin-bottom: 20px;">
+            <div class="field-badge">📝 正文模板（换行用回车，每段自动缩进）</div>
+            <textarea id="customTemplate" rows="5">在{{学年}}{{学期}}{{考试}}中，你取得了{{科目}}{{名次}}的好成绩。
+
+特发此状，以兹鼓励。</textarea>
+            <div class="variable-hint">
+                <span onclick="insertVariable('{{学年}}')">{{学年}}</span>
+                <span onclick="insertVariable('{{学期}}')">{{学期}}</span>
+                <span onclick="insertVariable('{{考试}}')">{{考试}}</span>
+                <span onclick="insertVariable('{{科目}}')">{{科目}}</span>
+                <span onclick="insertVariable('{{名次}}')">{{名次}}</span>
+                <span onclick="insertNewLine()">换行</span>
+            </div>
+            <div class="indent-hint">📌 每个段落首行缩进2字符。直接按回车换行即可开始新段落，新段落也会自动缩进。</div>
+        </div>
+
+        <div style="margin-bottom: 20px;">
+            <div class="field-badge">🖼️ 背景图 (可选)</div>
+            <div class="upload-bg" id="uploadBgArea">📂 点击上传背景图片</div>
+            <input type="file" id="bgUploadInput" accept="image/*" style="display:none">
+            <button class="btn-icon" id="resetBgBtn" style="background:#e2e8f0; margin-top:6px;">清除背景</button>
+        </div>
+        
+        <div class="data-panel" style="margin-top: 0; box-shadow: none; padding: 0;">
+            <div class="toolbar" style="margin-bottom: 12px;">
+                <button class="btn btn-primary" id="importExcelBtn">📂 导入Excel</button>
+                <button class="btn" id="downloadTemplateBtn">📎 模板下载</button>
+                <button class="btn" id="addRowBtn">➕ 添加学生</button>
+                <button class="btn btn-warning" id="printPDFBtn">🖨️ 生成PDF</button>
+            </div>
+            <div style="overflow-x:auto;">
+                <table class="data-table" id="dataTable">
+                    <thead>
+                        <tr>
+                            <th>👤 姓名</th>
+                            <th>📚 科目</th>
+                            <th>🏆 名次</th>
+                            <th>⚙️</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="preview-panel">
+        <div class="preview-header">
+            <strong>🎯 预览 - 生成PDF时最后一张为空白页，不打印即可</strong>
+            <span>✋ 拖拽移动 | 🔵 拖拽蓝点缩放字体</span>
+        </div>
+        <div id="certScrollContainer" class="cert-scroll"></div>
+        <div class="size-hint">💡 每个段落的第一行都会缩进2个字符</div>
+    </div>
+</div>
+
+<script>
+    let awardsData = [];
+    let previewBgUrl = null;
+    
+    let globalYear = "2025-2026学年";
+    let globalSemester = "第一学期";
+    let globalExam = "期中考试";
+    let globalSignatory = "XX班";
+    let globalDate = "2026年5月";
+    let customTemplate = "在{{学年}}{{学期}}{{考试}}中，你取得了{{科目}}{{名次}}的好成绩。\n特发此状，以兹鼓励。";
+    
+    let styleConfig = {
+        greeting: { x: 21, y: 38, fontSize: 34, weight: "bold" },
+        body: { x: 50, y: 55, fontSize: 32, lineHeight: "1.8" },
+        signature: { x: 85, y: 80, fontSize: 32, gap: 6 }
+    };
+
+    function escapeHtml(str) { 
+        if(!str) return ''; 
+        return str.replace(/[&<>]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[m])); 
+    }
+    
+    // 将模板中的变量替换为实际值，并保留换行符
+    function renderTemplate(item) {
+        let text = customTemplate;
+        text = text.replace(/\{\{学年\}\}/g, escapeHtml(globalYear));
+        text = text.replace(/\{\{学期\}\}/g, escapeHtml(globalSemester));
+        text = text.replace(/\{\{考试\}\}/g, escapeHtml(globalExam));
+        let subject = (item.subject && item.subject.trim()) ? item.subject : "本学科";
+        text = text.replace(/\{\{科目\}\}/g, escapeHtml(subject));
+        text = text.replace(/\{\{名次\}\}/g, escapeHtml(item.rank || '优异成绩'));
+        return text;
+    }
+    
+    // 将文本中的换行符转换为带缩进的段落
+    function formatParagraphs(text) {
+        if (!text) return '';
+        // 按换行符分割，过滤空段落，每个段落用 p 标签包裹并设置首行缩进
+        const paragraphs = text.split(/\r?\n/);
+        let result = '';
+        for (let p of paragraphs) {
+            // 跳过完全空的行（但保留有内容的段落之间的空行间距）
+            if (p.trim() === '') {
+                result += '<p style="margin:0; height:0.5em;"></p>';
+            } else {
+                result += `<p style="margin:0 0 0.2em 0; text-indent:2em;">${p}</p>`;
+            }
+        }
+        return result;
+    }
+    
+    function getGreeting(item) {
+        return escapeHtml(item.name || '同学') + "同学：";
+    }
+    
+    window.insertNewLine = function() {
+        const textarea = document.getElementById('customTemplate');
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        const text = textarea.value;
+        textarea.value = text.substring(0, start) + '\n' + text.substring(end);
+        textarea.focus();
+        textarea.selectionStart = textarea.selectionEnd = start + 1;
+    };
+    
+    function attachInteractions(cardElement) {
+        const greetingDiv = cardElement.querySelector('.drag-greeting');
+        const bodyDiv = cardElement.querySelector('.drag-body');
+        const signatureDiv = cardElement.querySelector('.drag-signature');
+        
+        function makeMovable(element, configKey, xKey, yKey) {
+            if(!element) return;
+            let isDragging = false;
+            let startMouse = { x: 0, y: 0 };
+            let startPercent = { x: 0, y: 0 };
+            let rect = null;
+            
+            element.addEventListener('mousedown', (e) => {
+                if(e.target.classList && e.target.classList.contains('resize-handle')) return;
+                e.preventDefault();
+                e.stopPropagation();
+                isDragging = true;
+                startMouse.x = e.clientX;
+                startMouse.y = e.clientY;
+                startPercent.x = styleConfig[configKey][xKey];
+                startPercent.y = styleConfig[configKey][yKey];
+                rect = cardElement.getBoundingClientRect();
+                element.style.cursor = 'grabbing';
+                document.body.style.userSelect = 'none';
+            });
+            
+            window.addEventListener('mousemove', (e) => {
+                if(!isDragging) return;
+                const dx = e.clientX - startMouse.x;
+                const dy = e.clientY - startMouse.y;
+                let deltaX = (dx / rect.width) * 100;
+                let deltaY = (dy / rect.height) * 100;
+                let newX = startPercent.x + deltaX;
+                let newY = startPercent.y + deltaY;
+                if(configKey === 'signature') {
+                    newX = Math.min(93, Math.max(55, newX));
+                    newY = Math.min(92, Math.max(68, newY));
+                } else {
+                    newX = Math.min(92, Math.max(5, newX));
+                    newY = Math.min(88, Math.max(10, newY));
+                }
+                styleConfig[configKey][xKey] = newX;
+                styleConfig[configKey][yKey] = newY;
+                element.style.left = newX + '%';
+                element.style.top = newY + '%';
+                if(configKey === 'signature' && signatureDiv) {
+                    signatureDiv.style.left = newX + '%';
+                    signatureDiv.style.top = newY + '%';
+                }
+            });
+            
+            window.addEventListener('mouseup', () => {
+                if(isDragging) {
+                    isDragging = false;
+                    element.style.cursor = '';
+                    document.body.style.userSelect = '';
+                    renderAll();
+                }
+            });
+        }
+        
+        function attachResize(element, configKey, fontSizeKey) {
+            const handle = element.querySelector('.resize-handle');
+            if(!handle) return;
+            let isResizing = false;
+            let startFontSize = 0;
+            let startMouseY = 0;
+            handle.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                isResizing = true;
+                startFontSize = styleConfig[configKey][fontSizeKey];
+                startMouseY = e.clientY;
+                document.body.style.userSelect = 'none';
+                handle.style.transform = 'scale(1.2)';
+            });
+            window.addEventListener('mousemove', (e) => {
+                if(!isResizing) return;
+                let deltaY = startMouseY - e.clientY;
+                let newSize = startFontSize + deltaY * 0.25;
+                if(configKey === 'greeting') newSize = Math.min(56, Math.max(18, newSize));
+                else if(configKey === 'body') newSize = Math.min(46, Math.max(14, newSize));
+                else if(configKey === 'signature') newSize = Math.min(30, Math.max(10, newSize));
+                styleConfig[configKey][fontSizeKey] = Math.round(newSize);
+                if(configKey === 'signature') {
+                    const sigDivs = element.querySelectorAll('div');
+                    if(sigDivs.length >= 2) {
+                        if(sigDivs[0]) sigDivs[0].style.fontSize = Math.round(newSize) + 'px';
+                        if(sigDivs[1]) sigDivs[1].style.fontSize = Math.round(newSize) + 'px';
+                    }
+                } else if(configKey === 'body') {
+                    // 缩放时更新所有p标签的字体大小
+                    const ps = element.querySelectorAll('p');
+                    ps.forEach(p => p.style.fontSize = Math.round(newSize) + 'px');
+                    element.style.fontSize = Math.round(newSize) + 'px';
+                } else {
+                    element.style.fontSize = Math.round(newSize) + 'px';
+                }
+            });
+            window.addEventListener('mouseup', () => {
+                if(isResizing) {
+                    isResizing = false;
+                    document.body.style.userSelect = '';
+                    if(handle) handle.style.transform = '';
+                    renderAll();
+                }
+            });
+        }
+        
+        makeMovable(greetingDiv, 'greeting', 'x', 'y');
+        makeMovable(bodyDiv, 'body', 'x', 'y');
+        if(signatureDiv) makeMovable(signatureDiv, 'signature', 'x', 'y');
+        
+        attachResize(greetingDiv, 'greeting', 'fontSize');
+        attachResize(bodyDiv, 'body', 'fontSize');
+        if(signatureDiv) attachResize(signatureDiv, 'signature', 'fontSize');
+    }
+    
+    function renderAll() {
+        const container = document.getElementById('certScrollContainer');
+        if(!container) return;
+        
+        if(!awardsData || awardsData.length === 0) { 
+            container.innerHTML = '<div style="padding:40px;text-align:center;color:#555;">暂无数据，请点击「添加学生」或「导入Excel」</div>'; 
+            return; 
+        }
+        
+        let html = '';
+        for(let idx=0; idx<awardsData.length; idx++) {
+            const d = awardsData[idx];
+            const bgStyle = previewBgUrl ? `background-image: url('${previewBgUrl}'); background-size: cover; background-position: center;` : 'background: #fff8f0;';
+            const rawBodyText = renderTemplate(d);
+            // 处理换行，每个段落单独包裹p标签并设置首行缩进
+            const formattedBodyText = formatParagraphs(rawBodyText);
+            const greeting = getGreeting(d);
+            const signGap = styleConfig.signature.gap;
+            
+            html += `
+                <div class="cert-canvas-card" style="${bgStyle}" data-card-idx="${idx}">
+                    <div class="cert-text-layer">
+                        <div class="draggable-item greeting-text drag-greeting" style="left: ${styleConfig.greeting.x}%; top: ${styleConfig.greeting.y}%; font-size: ${styleConfig.greeting.fontSize}px; font-weight: ${styleConfig.greeting.weight}; font-family: 'SimSun', '宋体', serif;">
+                            ${greeting}
+                            <div class="resize-handle"></div>
+                        </div>
+                        <div class="draggable-item drag-body" style="left: ${styleConfig.body.x}%; top: ${styleConfig.body.y}%; width: 76%;">
+                            <div class="body-content" style="font-size: ${styleConfig.body.fontSize}px; line-height: ${styleConfig.body.lineHeight}; font-family: 'SimSun', '宋体', serif;">
+                                ${formattedBodyText}
+                            </div>
+                            <div class="resize-handle"></div>
+                        </div>
+                        <div class="draggable-item drag-signature signature-wrapper" style="left: ${styleConfig.signature.x}%; top: ${styleConfig.signature.y}%; text-align: center; font-family: 'SimSun', '宋体', serif;">
+                            <div style="font-size: ${styleConfig.signature.fontSize}px; margin-bottom: ${signGap}px; white-space: nowrap;">${escapeHtml(globalSignatory)}</div>
+                            <div style="font-size: ${styleConfig.signature.fontSize}px; white-space: nowrap;">${escapeHtml(globalDate)}</div>
+                            <div class="resize-handle"></div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        container.innerHTML = html;
+        
+        const cards = document.querySelectorAll('.cert-canvas-card');
+        cards.forEach((card) => {
+            attachInteractions(card);
+        });
+    }
+    
+    function renderTable() {
+        const tbody = document.getElementById('tableBody');
+        if(!tbody) return;
+        tbody.innerHTML = '';
+        
+        if(!awardsData || awardsData.length === 0) {
+            const tr = document.createElement('tr');
+            const td = document.createElement('td');
+            td.colSpan = 4;
+            td.style.textAlign = 'center';
+            td.style.padding = '20px';
+            td.innerText = '暂无数据，请点击「添加学生」或「导入Excel」';
+            tr.appendChild(td);
+            tbody.appendChild(tr);
+            return;
+        }
+        
+        awardsData.forEach((item, idx) => {
+            const tr = document.createElement('tr');
+            ['name', 'subject', 'rank'].forEach(field => {
+                const td = document.createElement('td');
+                const inp = document.createElement('input');
+                inp.value = item[field] || '';
+                inp.placeholder = field;
+                inp.addEventListener('input', (e) => { 
+                    item[field] = e.target.value; 
+                    renderAll(); 
+                });
+                td.appendChild(inp);
+                tr.appendChild(td);
+            });
+            const tdDel = document.createElement('td');
+            const delBtn = document.createElement('button');
+            delBtn.textContent = '🗑️';
+            delBtn.className = 'delete-row';
+            delBtn.onclick = () => { 
+                awardsData.splice(idx,1); 
+                if(awardsData.length === 0) {
+                    awardsData.push({name:"示例学生", subject:"数学", rank:"第一名"});
+                }
+                renderTable(); 
+                renderAll(); 
+            };
+            tdDel.appendChild(delBtn);
+            tr.appendChild(tdDel);
+            tbody.appendChild(tr);
+        });
+    }
+    
+    function importExcel(file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, { type: 'array' });
+            const sheet = workbook.Sheets[workbook.SheetNames[0]];
+            const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+            if(!rows || rows.length < 2) return alert("至少需要两行数据（表头+内容）");
+            const headers = rows[0].map(c=>String(c||"").trim().toLowerCase());
+            const colIdx = { name:-1, subject:-1, rank:-1 };
+            headers.forEach((h,i)=>{
+                if(h.includes('姓名') || h === 'name') colIdx.name = i;
+                else if(h.includes('科目') || h === 'subject') colIdx.subject = i;
+                else if(h.includes('名次') || h.includes('成绩') || h === 'rank') colIdx.rank = i;
+            });
+            const newData = [];
+            for(let r=1; r<rows.length; r++){
+                const row = rows[r];
+                if(!row || row.length === 0) continue;
+                newData.push({
+                    name: (colIdx.name !== -1 && row[colIdx.name]) ? String(row[colIdx.name]).trim() : "同学",
+                    subject: (colIdx.subject !== -1 && row[colIdx.subject]) ? String(row[colIdx.subject]).trim() : "",
+                    rank: (colIdx.rank !== -1 && row[colIdx.rank]) ? String(row[colIdx.rank]).trim() : "优秀"
+                });
+            }
+            if(newData.length) { 
+                awardsData = newData; 
+                renderTable(); 
+                renderAll(); 
+                alert(`成功导入 ${awardsData.length} 条数据`);
+            } else {
+                alert("未识别到有效数据，请确保Excel包含姓名、科目、名次列");
+            }
+        };
+        reader.readAsArrayBuffer(file);
+    }
+    
+    function downloadTemplate() {
+        const wsData = [["姓名","科目","名次"],["张欣怡","数学","第1名"],["李芳雨","语文","特等奖"]];
+        const ws = XLSX.utils.aoa_to_sheet(wsData);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "奖状模板");
+        XLSX.writeFile(wb, "考试奖状模板.xlsx");
+    }
+    
+    function applyGlobal() {
+        globalYear = document.getElementById('globalYear').value;
+        globalSemester = document.getElementById('globalSemester').value;
+        globalExam = document.getElementById('globalExam').value;
+        globalSignatory = document.getElementById('globalSignatory').value;
+        globalDate = document.getElementById('globalDate').value;
+        customTemplate = document.getElementById('customTemplate').value;
+        // 重新渲染整个预览区域
+        renderAll();
+        alert("全局设置已应用");
+    }
+    
+    window.insertVariable = function(varText) {
+        const textarea = document.getElementById('customTemplate');
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        const text = textarea.value;
+        textarea.value = text.substring(0, start) + varText + text.substring(end);
+        textarea.focus();
+        textarea.selectionStart = textarea.selectionEnd = start + varText.length;
+    };
+    
+    function setupPreviewBg() {
+        const input = document.getElementById('bgUploadInput');
+        const area = document.getElementById('uploadBgArea');
+        area.onclick = () => input.click();
+        input.onchange = (e) => {
+            const file = e.target.files[0];
+            if(file && file.type.startsWith('image')) {
+                const reader = new FileReader();
+                reader.onload = ev => { previewBgUrl = ev.target.result; renderAll(); };
+                reader.readAsDataURL(file);
+            }
+        };
+        document.getElementById('resetBgBtn').onclick = () => { previewBgUrl = null; renderAll(); };
+    }
+    
+    function generatePDF() {
+        if(!awardsData || awardsData.length === 0) return alert("没有奖状数据，请先添加学生或导入Excel");
+        
+        let cardsHtml = '';
+        for(let i = 0; i < awardsData.length; i++) {
+            const d = awardsData[i];
+            const rawBodyText = renderTemplate(d);
+            const formattedBodyText = formatParagraphs(rawBodyText);
+            const greeting = getGreeting(d);
+            const signGap = styleConfig.signature.gap;
+            cardsHtml += `
+                <div class="print-card">
+                    <div class="print-layer">
+                        <div class="p-greeting" style="left:${styleConfig.greeting.x}%;top:${styleConfig.greeting.y}%;font-size:${styleConfig.greeting.fontSize}px;font-weight:${styleConfig.greeting.weight};font-family:'SimSun','宋体',serif;">${greeting}</div>
+                        <div class="p-body" style="left:${styleConfig.body.x}%;top:${styleConfig.body.y}%;width:76%;">
+                            <div style="font-size:${styleConfig.body.fontSize}px;line-height:${styleConfig.body.lineHeight};font-family:'SimSun','宋体',serif;">${formattedBodyText}</div>
+                        </div>
+                        <div style="position:absolute;left:${styleConfig.signature.x}%;top:${styleConfig.signature.y}%;transform:translate(-50%,-50%);text-align:center;font-family:'SimSun','宋体',serif;">
+                            <div style="font-size:${styleConfig.signature.fontSize}px;margin-bottom:${signGap}px;">${escapeHtml(globalSignatory)}</div>
+                            <div style="font-size:${styleConfig.signature.fontSize}px;">${escapeHtml(globalDate)}</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        const printWindow = window.open('', '_blank');
+        if(!printWindow) {
+            alert("请允许弹出窗口");
+            return;
+        }
+        
+        printWindow.document.write(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <title>奖状打印</title>
+                <style>
+                    * { margin: 0; padding: 0; box-sizing: border-box; }
+                    body { background: white; margin: 0; padding: 0; }
+                    .print-card { position: relative; width: 100%; height: auto; aspect-ratio: 297 / 210; background: white; margin: 0; padding: 0; }
+                    .print-layer { position: relative; width: 100%; height: 100%; }
+                    .print-card .p-greeting { position: absolute; transform: translate(-50%, -50%); white-space: nowrap; }
+                    .print-card .p-body { position: absolute; transform: translate(-50%, -50%); }
+                    .print-card p { margin: 0 0 0.2em 0; text-indent: 2em; }
+                    @page { size: landscape; margin: 0.5cm; }
+                    @media print { body { margin: 0; padding: 0; } }
+                </style>
+            </head>
+            <body>
+                ${cardsHtml}
+                <script>
+                    window.onload = function() { setTimeout(function() { window.print(); }, 200); };
+                <\/script>
+            </body>
+            </html>
+        `);
+        printWindow.document.close();
+    }
+    
+    function addEmptyRow() { 
+        awardsData.push({name:"新同学", subject:"数学", rank:"优秀"}); 
+        renderTable(); 
+        renderAll(); 
+    }
+    
+    function initDefault() { 
+        awardsData = [
+            {name:"张三", subject:"数学", rank:"第一名"}, 
+            {name:"李四", subject:"语文", rank:"第一名"}
+        ]; 
+        renderTable(); 
+        renderAll(); 
+    }
+    
+    document.getElementById('importExcelBtn').onclick = () => { 
+        let inp = document.createElement('input'); 
+        inp.type = 'file'; 
+        inp.accept = '.xlsx,.xls'; 
+        inp.onchange = e => { if(inp.files[0]) importExcel(inp.files[0]); }; 
+        inp.click(); 
+    };
+    document.getElementById('downloadTemplateBtn').onclick = downloadTemplate;
+    document.getElementById('addRowBtn').onclick = addEmptyRow;
+    document.getElementById('printPDFBtn').onclick = generatePDF;
+    document.getElementById('applyGlobalBtn').onclick = applyGlobal;
+    
+    document.getElementById('globalYear').value = globalYear;
+    document.getElementById('globalSemester').value = globalSemester;
+    document.getElementById('globalExam').value = globalExam;
+    document.getElementById('globalSignatory').value = globalSignatory;
+    document.getElementById('globalDate').value = globalDate;
+    document.getElementById('customTemplate').value = customTemplate;
+    
+    setupPreviewBg();
+    initDefault();
+</script>
+</body>
+</html>
